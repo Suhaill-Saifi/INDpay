@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Register</title>
+
+        <link href="{{url_for('static' ,filename='css/style.css')}}" rel="stylesheet">
+</head>
+<body style="background-image: url('/static/images/cover.png'); background-size: cover; ">
+   
+
+    <div class="login-box">
+
+  <form method="Post" action="">
+    <span id="ms">{% include 'includes/_messages.html' %}</span>
+    <div class="user-box">
+      <input type="text"   id="inputname"  name="name" class="form-control" placeholder=""  required="required" autofocus="autofocus" value={{request.form.name}}>
+      <label for="inputName">Full Name</label>
+    </div>
+    <div class="user-box">
+      <input type="text"  id="inputUsername"  name="username" class="form-control" placeholder=""  required="required" autofocus="autofocus" value={{request.form.username}}>
+    <label for="inputUsername">User Name</label>
+    </div>
+    <div class="user-box">
+      <input type="text"  id="inputEmail"  name="email" class="form-control" placeholder=""  required="required" autofocus="autofocus" value={{request.form.email}}>
+      <label for="inputEmail">Email</label>
+    </div>
+    <div class="user-box">
+      <input type="password"  id="inputPassword" name="password" class="form-control" placeholder=""  required="required" autofocus="autofocus" value={{request.form.password}} >
+      <label for="inputPassword">Password</label>
+    </div>
+    <div class="user-box">
+      <input type="password"  id="ConfirmPassword"  name="confirm" class="form-control" placeholder=""  required="required" autofocus="autofocus" value={{request.form.confirm}}>
+      <label for="ConfirmPassword"> Confirm Password</label>
+    </div><center>
+
+
+      <button class="btn" type="submit">
+        <svg height="24" width="24" fill="#FFFFFF" viewBox="0 0 24 24" data-name="Layer 1" id="Layer_1" class="sparkle">
+            <path d="M10,21.236,6.755,14.745.264,11.5,6.755,8.255,10,1.764l3.245,6.491L19.736,11.5l-6.491,3.245ZM18,21l1.5,3L21,21l3-1.5L21,18l-1.5-3L18,18l-3,1.5ZM19.333,4.667,20.5,7l1.167-2.333L24,3.5,21.667,2.333,20.5,0,19.333,2.333,17,3.5Z"></path>
+        </svg>
+
+        <span class="text">Register</span>
+    </button>
+  </center>
+
+  <a href="/login" id="a-register">Already have an account? Login now</a>
+</br>
+  <a href="/" id="a-home">Home page</a>
+  </form>
+</div>
+</body>
+</html>
