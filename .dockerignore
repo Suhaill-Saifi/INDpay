@@ -1,0 +1,41 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+env/
+myenv/
+indpayenv/
+
+# Environment & secrets
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Docs & media (not needed in container)
+README.md
+*.pptx
+*.mov
+*.jpeg
+*.jpg
+*.png
+
+# IDE & tools
+.vscode/
+.idea/
+.anima/
+
+# Docker files themselves
+docker-compose*.yml
+Dockerfile

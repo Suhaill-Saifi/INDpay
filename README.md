@@ -1,108 +1,150 @@
-# INDpay
-INDpay_blockchain  
-Unlocking Borderless Payments with Blockchain Innovation.   
-Blockchain technology is revolutionizing the way we think about cross-border transactions. Discover how innovative blockchain solutions are unlocking a new era of seamless, secure, and lightning-fast global payments.
+# INDpay — Digital Payment Web App
 
+A college project built with Flask and MySQL that simulates a digital payment system with blockchain-backed transaction logging.
 
-#INDpay DEMO
+---
 
-https://github.com/saifism/INDpay/assets/114340669/f6687884-bb49-44e3-9a32-d4c3e1578ccb
+## Features
 
+- User registration & login with hashed passwords
+- Send money between users
+- Buy (add funds) from the bank
+- Transaction history on dashboard
+- Blockchain layer for transaction integrity
+- Fully containerized with Docker
 
+---
 
-#MySql blockchain database
-
-<img width="1680" alt="Screenshot 2024-04-26 at 10 21 40 PM" src="https://github.com/saifism/INDpay/assets/114340669/bcdac1b3-8637-4cb7-abf5-277d9312b8c6">
-
-
-
-## Getting Started
-To get started simply download this repository.
-
-From the command line:
+## Project Structure
 
 ```
-https://github.com/saifism/INDpay.git
+indpay/
+├── app.py               # Main Flask app — routes & logic
+├── forms.py             # WTForms form definitions
+├── blockchain.py        # Block & Blockchain classes
+├── sqlhelpers.py        # DB helper utilities (legacy blockchain sync)
+├── requirements.txt     # Python dependencies
+├── init.sql             # DB schema + default admin user
+│
+├── Dockerfile           # Flask app container
+├── docker-compose.yml   # Orchestrates Flask + MySQL
+├── .dockerignore        # Files excluded from Docker build
+├── .gitignore           # Files excluded from Git
+│
+├── templates/           # Jinja2 HTML templates
+│   ├── index.html
+│   ├── login.html
+│   ├── register.html
+│   ├── dashboard.html
+│   ├── transection.html
+│   ├── buy.html
+│   └── includes/
+│       ├── _messages.html
+│       └── _formhelper.html
+│
+└── static/
+    ├── css/             # Stylesheets
+    ├── js/              # Chart.js and custom scripts
+    └── images/          # Static images
 ```
 
-Once downloaded, switch into the source folder and run app.py
-```
-$ cd INDpay # This may be different for you
-$ python app.py
-```
-INDpay is now up and running!
+---
 
-## Prerequisites
+## Quick Start (Docker — recommended)
 
-### Install mySQL
-Note: You may skip this if you already have mySQL installed
-```
-$ brew install mysql 
-$ brew tap homebrew/services
-$ brew services start mysql
-$ mysqladmin -u root password 'yourpassword' 
-```
+> Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed.
 
-### Configure mySQL 
-Start mySql session in terminal
-```$ mysql -u root -p```
+```bash
+# 1. Clone or download the project
+cd indpay
 
-Enter your password in app.py in 
+# 2. Build and start everything
+docker compose up --build
 
-app.config['MYSQL_PASSWORD'] = 'password' 
-
-
-#### Create database and tables
-```
-mysql> 
-       CREATE DATABASE INDpay;
-       use INDpay;
-       CREATE TABLE users(name varchar(30), email varchar(30), username varchar(20), password varchar(50));
-       CREATE TABLE blockchain(number varchar(30), hash varchar(68), previous varchar(68), data varchar(100), nonce varchar(30));
+# 3. Open in browser
+http://localhost:5000
 ```
 
-#### Configure Database Config File
-Update Line 41 in ```app.py``` with the password saved above
+That's it. MySQL starts automatically, the schema is applied, and the Flask app connects to it.
 
-If you are having troubles install mySql, you may use the link below. 
-https://www.youtube.com/watch?v=UcpHkYfWarM 
+---
 
-### Dependencies
-Make sure you have Python 3 installed. Install the following dependencies.
-``` 
-pip3 install -r requirements.txt 
+## Default Admin Account
+
+| Field    | Value           |
+|----------|-----------------|
+| Username | `admin`         |
+| Password | `Admin@123`     |
+
+Change the password after first login.
+
+---
+
+## Environment Variables
+
+These are set in `docker-compose.yml`. Override them for production:
+
+| Variable        | Default      | Description              |
+|-----------------|--------------|--------------------------|
+| `MYSQL_HOST`    | `mysql`      | DB hostname              |
+| `MYSQL_USER`    | `indpay`     | DB username              |
+| `MYSQL_PASSWORD`| `indpaypass` | DB password              |
+| `MYSQL_DB`      | `INDpay`     | Database name            |
+| `SECRET_KEY`    | `secret123`  | Flask session secret key |
+
+---
+
+## Useful Commands
+
+```bash
+# Start in background
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+
+# Stop containers
+docker compose down
+
+# Stop and delete all data (fresh start)
+docker compose down -v
 ```
 
-```  
-# You can also install them manually
+---
 
-$ pip install Flask
-  pip install simple-crypt
-  pip install passlib
-  pip install flask_mysqldb #mySql must be installed, see below
-  pip install functools
-  pip install wtforms
+## Running Locally (without Docker)
+
+```bash
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+export MYSQL_HOST=localhost
+export MYSQL_USER=root
+export MYSQL_PASSWORD=yourpassword
+export MYSQL_DB=INDpay
+
+# Run the app
+python app.py
 ```
 
-## Built With
-HTML - Front end web framework
+Make sure MySQL is running locally and the schema from `init.sql` has been applied.
 
-CSS - Front end styling
+---
 
-JS - Backend framework
+## Tech Stack
 
-Python - Backend application
-
-Flask - Python Web Framework
-
-
-## Authors
-SUHAIL SAIFI - Entire Project
-
-KARAN RANA - Blockchain / Installation Process
-
-
-## License
-This project is licensed under the MIT License - see the LICENSE file for details
-
-
+| Layer      | Technology          |
+|------------|---------------------|
+| Backend    | Python / Flask      |
+| Database   | MySQL 8             |
+| ORM/DB     | Flask-MySQLdb       |
+| Forms      | WTForms             |
+| Auth       | passlib (sha256)    |
+| Frontend   | Jinja2 + Bootstrap  |
+| Charts     | Chart.js            |
+| Container  | Docker + Compose    |

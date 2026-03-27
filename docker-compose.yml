@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: indpay_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: INDpay
+      MYSQL_USER: indpay
+      MYSQL_PASSWORD: indpaypass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - indpay_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  flask_app:
+    build: .
+    container_name: indpay_flask
+    restart: unless-stopped
+    ports:
+      - "5005:5005"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: indpay
+      MYSQL_PASSWORD: indpaypass
+      MYSQL_DB: INDpay
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - indpay_net
+
+volumes:
+  mysql_data:
+
+networks:
+  indpay_net:
+    driver: bridge

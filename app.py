@@ -1,165 +1,261 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-import mysql.connector
-from flask import Flask, render_template, flash, redirect, url_for, session, request, logging
-from passlib.hash import sha256_crypt
+import os
+import pymysql
+pymysql.install_as_MySQLdb()
+
+from flask import Flask, render_template, flash, redirect, url_for, session, request
 from flask_mysqldb import MySQL
-from forms import *
-from flask_wtf import FlaskForm
+from passlib.hash import sha256_crypt
 from functools import wraps
-from wraps import *
-
-
-from sqlhelpers import *
-
-
-import time
+from forms import RegisterForm, SendMoneyForm, BuyForm
+from sqlhelpers import get_blockchain as _get_blockchain, sync_blockchain as _sync_blockchain
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'secret123')
 
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = 'password' #enter your mysql password 
-app.config['MYSQL_DB'] = 'INDpay'
+# MySQL config from environment variables (set in docker-compose.yml)
+app.config['MYSQL_HOST']        = os.environ.get('MYSQL_HOST', 'localhost')
+app.config['MYSQL_USER']        = os.environ.get('MYSQL_USER', 'root')
+app.config['MYSQL_PASSWORD']    = os.environ.get('MYSQL_PASSWORD', '')
+app.config['MYSQL_DB']          = os.environ.get('MYSQL_DB', 'INDpay')
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 
 mysql = MySQL(app)
 
+
+# ── Auth decorator ──────────────────────────────────────────────────────────
 def is_logged_in(f):
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'logged_in' in session:
             return f(*args, **kwargs)
-        else:
-            flash("Unauthorized, please login.", "danger")
-            return redirect(url_for('login'))
+        flash("Unauthorized, please login.", "danger")
+        return redirect(url_for('login'))
     return wrap
 
 
+# ── Money transfer helper ───────────────────────────────────────────────────
+def send_money(sender, receiver, amount):
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        raise Exception("Invalid amount.")
 
-def log_in_user(username):
-    users = Table("users", "name", "email", "username", "password")
-    user = users.getone("username", username)
+    if amount <= 0:
+        raise Exception("Amount must be greater than zero.")
 
-    session['logged_in'] = True
-    session['username'] = username
-    session['name'] = user.get('name')
-    session['email'] = user.get('email')
+    cursor = mysql.connection.cursor()
+    try:
+        # Check sender balance (skip for BANK)
+        if sender != "BANK":
+            cursor.execute("SELECT balance FROM users WHERE username = %s", [sender])
+            row = cursor.fetchone()
+            if not row:
+                raise Exception("Sender account not found.")
+            sender_balance = float(row['balance'])
+            if sender_balance < amount:
+                raise Exception(f"Insufficient balance. You have {sender_balance:.2f} IND but tried to send {amount:.2f} IND.")
+
+        # Check receiver exists
+        cursor.execute("SELECT id FROM users WHERE username = %s", [receiver])
+        if not cursor.fetchone():
+            raise Exception(f"User '{receiver}' does not exist.")
+
+        if sender == receiver:
+            raise Exception("Cannot send money to yourself.")
+
+        # Update balances
+        if sender != "BANK":
+            cursor.execute(
+                "UPDATE users SET balance = balance - %s WHERE username = %s",
+                (amount, sender)
+            )
+        cursor.execute(
+            "UPDATE users SET balance = balance + %s WHERE username = %s",
+            (amount, receiver)
+        )
+
+        # Record in transactions table
+        cursor.execute(
+            "INSERT INTO transactions (sender, receiver, amount) VALUES (%s, %s, %s)",
+            (sender, receiver, amount)
+        )
+        mysql.connection.commit()
+
+        # Record in blockchain
+        try:
+            from blockchain import Block
+            blockchain = _get_blockchain(mysql)
+            block_number = len(blockchain.chain) + 1
+            block_data   = f"{sender}-->{receiver}-->{amount}"
+            blockchain.mine(Block(block_number, data=block_data))
+            _sync_blockchain(mysql, blockchain)
+        except Exception as bc_err:
+            # Blockchain failure should not roll back the financial transaction
+            app.logger.warning(f"Blockchain sync failed: {bc_err}")
+
+    except Exception:
+        mysql.connection.rollback()
+        raise
+    finally:
+        cursor.close()
 
 
-@app.route("/register", methods = ['GET', 'POST'])
+# ── Routes ──────────────────────────────────────────────────────────────────
+@app.route("/")
+def index():
+    return render_template('index.html')
+
+
+@app.route("/register", methods=['GET', 'POST'])
 def register():
     form = RegisterForm(request.form)
-    users = Table("users", "name", "email", "username", "password")
-
-    #if form is submitted
-    if request.method == 'POST' and form.validate():
-        #collect form data
+    if request.method == 'POST':
+        if not form.validate():
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f"{field}: {error}", 'danger')
+            return render_template('register.html', form=form)
         username = form.username.data
-        email = form.email.data
-        name = form.name.data
-
-        #make sure user does not already exist
-        if isnewuser(username):
-            #add the user to mysql and log them in
-            password = sha256_crypt.encrypt(form.password.data)
-            users.insert(name,email,username,password)
-            log_in_user(username)
-            return redirect(url_for('dashboard'))
-        else:
-            flash('User already exists', 'danger')
+        cursor   = mysql.connection.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = %s", [username])
+        if cursor.fetchone():
+            cursor.close()
+            flash('Username already taken', 'danger')
             return redirect(url_for('register'))
+        cursor.close()
+
+        password = sha256_crypt.encrypt(form.password.data)
+        cursor   = mysql.connection.cursor()
+        cursor.execute(
+            "INSERT INTO users (name, email, username, password, balance) VALUES (%s,%s,%s,%s,%s)",
+            (form.name.data, form.email.data, username, password, 1000.00)
+        )
+        mysql.connection.commit()
+        cursor.close()
+
+        session['logged_in'] = True
+        session['username']  = username
+        session['name']      = form.name.data
+        session['email']     = form.email.data
+        flash('Registration successful. Welcome!', 'success')
+        return redirect(url_for('dashboard'))
 
     return render_template('register.html', form=form)
 
-@app.route("/login", methods = ['GET', 'POST'])
+
+@app.route("/login", methods=['GET', 'POST'])
 def login():
-    #if form is submitted
     if request.method == 'POST':
-        #collect form data
-        username = request.form['username']
+        username  = request.form['username']
         candidate = request.form['password']
+        cursor    = mysql.connection.cursor()
+        cursor.execute("SELECT * FROM users WHERE username = %s", [username])
+        user = cursor.fetchone()
+        cursor.close()
 
-        #access users table to get the user's actual password
-        users = Table("users", "name", "email", "username", "password")
-        user = users.getone("username", username)
-        accPass = user.get('password')
+        if user and sha256_crypt.verify(candidate, user['password']):
+            session['logged_in'] = True
+            session['username']  = username
+            session['name']      = user.get('name', username)
+            session['email']     = user.get('email', '')
+            flash('You are now logged in.', 'success')
+            return redirect(url_for('dashboard'))
 
-        #if the password cannot be found, the user does not exist
-        if accPass is None:
-            flash("Username is not found", 'danger')
-            return redirect(url_for('login'))
-        else:
-            #verify that the password entered matches the actual password
-            if sha256_crypt.verify(candidate, accPass):
-                #log in the user and redirect to Dashboard page
-                log_in_user(username)
-                flash('You are now logged in.', 'success')
-                return redirect(url_for('dashboard'))
-            else:
-                #if the passwords do not match
-                flash("Invalid password", 'danger')
-                return redirect(url_for('login'))
-
+        flash('Invalid username or password', 'danger')
     return render_template('login.html')
-
-@app.route("/transection", methods = ['GET' , 'POST'])
-@is_logged_in
-def transection():
-    form = SendMoneyForm(request.form)
-    balance = get_balance(session.get('username'))
-
-    if request.method == 'POST':
-        try:
-            send_money(session.get('username'), form.username.data, form.amount.data)
-            flash("Money send!","success")
-        except Exception as e:
-            flash(str(e), 'danger')
-
-        return redirect(url_for('transection'))
-
-
-    return render_template('transection.html',balance=balance , form=form , page='transection')
-
-@app.route("/buy", methods = ['GET', 'POST'])
-@is_logged_in
-def buy():
-    form = BuyForm(request.form)
-    balance = get_balance(session.get('username'))
-
-    if request.method == 'POST':
-        #attempt to buy amount
-        try:
-            send_money("BANK", session.get('username'), form.amount.data)
-            flash("Purchase Successful!", "success")
-        except Exception as e:
-            flash(str(e), 'danger')
-
-        return redirect(url_for('buy'))
-
-    return render_template('buy.html', balance=balance, form=form, page='buy')
 
 
 @app.route("/logout")
 @is_logged_in
 def logout():
     session.clear()
-    flash("logout success",'success')
-    return redirect(url_for('index'))
+    flash("You have been logged out.", "success")
+    return redirect(url_for('login'))
+
 
 @app.route("/dashboard")
 @is_logged_in
 def dashboard():
-    blockchain = get_blockchain().chain
-    balance = get_balance(session.get('username'))
-    ct = time.strftime("%I:%M %p")
-    return render_template('dashboard.html', session=session ,balance=balance, ct=ct, blockchain=blockchain, page='dashboard')
+    from datetime import datetime
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = %s", [session['username']])
+    user_data = cursor.fetchone()
+    balance   = user_data['balance'] if user_data else 0
+
+    cursor.execute(
+        "SELECT * FROM transactions WHERE sender=%s OR receiver=%s ORDER BY timestamp DESC LIMIT 10",
+        [session['username'], session['username']]
+    )
+    transactions = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM users")
+    all_users = cursor.fetchall()
+    cursor.close()
+
+    try:
+        blockchain = _get_blockchain(mysql).chain
+    except Exception:
+        blockchain = []
+
+    return render_template('dashboard.html',
+                           balance=balance,
+                           transactions=transactions,
+                           data=all_users,
+                           blockchain=blockchain,
+                           ct=datetime.now().strftime("%H:%M"))
 
 
-@app.route("/")
-def index():
-    return render_template('index.html')
+@app.route("/transection", methods=['GET', 'POST'])
+@is_logged_in
+def transection():
+    form   = SendMoneyForm(request.form)
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT balance FROM users WHERE username = %s", [session['username']])
+    row    = cursor.fetchone()
+    cursor.close()
+    balance = row['balance'] if row else 0
+
+    if request.method == 'POST':
+        if not form.validate():
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f"{error}", 'danger')
+        else:
+            try:
+                send_money(session['username'], form.username.data, form.amount.data)
+                flash("Money sent successfully!", "success")
+            except Exception as e:
+                flash(str(e), 'danger')
+        return redirect(url_for('transection'))
+
+    return render_template('transection.html', balance=balance, form=form, page='transection')
+
+
+@app.route("/buy", methods=['GET', 'POST'])
+@is_logged_in
+def buy():
+    form   = BuyForm(request.form)
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT balance FROM users WHERE username = %s", [session['username']])
+    row    = cursor.fetchone()
+    cursor.close()
+    balance = row['balance'] if row else 0
+
+    if request.method == 'POST':
+        if not form.validate():
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f"{error}", 'danger')
+        else:
+            try:
+                send_money("BANK", session['username'], form.amount.data)
+                flash("Purchase successful! Funds added to your account.", "success")
+            except Exception as e:
+                flash(str(e), 'danger')
+        return redirect(url_for('dashboard'))
+
+    return render_template('buy.html', balance=balance, form=form, page='buy')
+
 
 if __name__ == '__main__':
-    app.secret_key = 'secret123'
-    app.run(debug = False,host='0.0.0.0')
+    app.run(host='0.0.0.0', port=5005, debug=True)
