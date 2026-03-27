@@ -148,3 +148,10 @@ Make sure MySQL is running locally and the schema from `init.sql` has been appli
 | Frontend   | Jinja2 + Bootstrap  |
 | Charts     | Chart.js            |
 | Container  | Docker + Compose    |
+
+<img width="1680" height="1050" alt="Image" src="https://github.com/user-attachments/assets/d65b79a6-9150-4894-975f-5a773ab45dc0" />
+
+https://github.com/user-attachments/assets/7fa34d35-1878-4d15-aca5-65884bb42438
+
+
+[INDpay.pptx](https://github.com/user-attachments/files/26297011/INDpay.pptx)
