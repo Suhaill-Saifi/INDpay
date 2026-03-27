@@ -62,7 +62,7 @@ cd indpay
 docker compose up --build
 
 # 3. Open in browser
-http://localhost:5000
+http://localhost:5005
 ```
 
 That's it. MySQL starts automatically, the schema is applied, and the Flask app connects to it.
